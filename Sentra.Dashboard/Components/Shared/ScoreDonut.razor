@@ -1,0 +1,38 @@
+@* Pure-SVG donut gauge rendered by Blazor — no JS chart library needed. *@
+<svg width="@Size" height="@Size" viewBox="0 0 120 120" role="img" aria-label="Compliance score @Score percent">
+    <circle cx="60" cy="60" r="@Radius" fill="none" stroke="var(--grid)" stroke-width="10" />
+    <circle cx="60" cy="60" r="@Radius" fill="none"
+            stroke="@Color" stroke-width="10" stroke-linecap="round"
+            stroke-dasharray="@Dash.ToString("0.##") @Circumference.ToString("0.##")"
+            transform="rotate(-90 60 60)"
+            style="transition: stroke-dasharray 0.5s ease" />
+    @((MarkupString)$"<text x=\"60\" y=\"58\" text-anchor=\"middle\" fill=\"var(--ink)\" font-size=\"26\" font-weight=\"700\">{Score}</text>")
+    @((MarkupString)$"<text x=\"60\" y=\"76\" text-anchor=\"middle\" fill=\"var(--ink-muted)\" font-size=\"10.5\">{System.Net.WebUtility.HtmlEncode(Caption)}</text>")
+</svg>
+
+@code {
+    [Parameter] public int Score { get; set; }
+    [Parameter] public int Size { get; set; } = 120;
+    [Parameter] public string Caption { get; set; } = "compliant";
+
+    private const double Radius = 50;
+    private static readonly double Circumference = 2 * Math.PI * Radius;
+    private double Dash => Circumference * Math.Clamp(Score, 0, 100) / 100.0;
+
+    private string Color => ScoreColor(Score);
+
+    /// <summary>Score band → status color. Shared so bars and donuts always agree.</summary>
+    public static string ScoreColor(int score) => score switch
+    {
+        >= 90 => "var(--good)",
+        >= 75 => "var(--warning)",
+        _ => "var(--critical)",
+    };
+
+    public static string ScoreBand(int score) => score switch
+    {
+        >= 90 => "good",
+        >= 75 => "warning",
+        _ => "critical",
+    };
+}

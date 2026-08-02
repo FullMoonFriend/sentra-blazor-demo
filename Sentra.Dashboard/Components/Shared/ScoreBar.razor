@@ -1,0 +1,10 @@
+<div class="scorebar" title="Compliance score: @Score%">
+    <div class="scorebar-track">
+        <div class="scorebar-fill @ScoreDonut.ScoreBand(Score)" style="width:@(Score)%"></div>
+    </div>
+    <span class="scorebar-num">@Score</span>
+</div>
+
+@code {
+    [Parameter] public int Score { get; set; }
+}

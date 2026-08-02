@@ -1,0 +1,17 @@
+@* Per-CIS-category enforcement. Single measure → single hue with direct labels. *@
+<div>
+    @foreach (var cat in Categories)
+    {
+        <div class="catbar-row" title="@cat.Category: @cat.Enforced of @cat.Total settings enforced">
+            <span class="catbar-label">@cat.Category</span>
+            <div class="catbar-track">
+                <div class="catbar-fill" style="width:@(cat.Percent)%"></div>
+            </div>
+            <span class="catbar-num">@(cat.Percent)%</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public required IReadOnlyList<CategoryCompliance> Categories { get; set; }
+}

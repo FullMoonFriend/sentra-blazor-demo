@@ -1,0 +1,104 @@
+@page "/drift"
+@rendermode InteractiveServer
+@inject IComplianceService Compliance
+
+<PageTitle>Sentra — Drift Events</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Drift Events</h1>
+        <div class="sub">Every detected deviation from the enforced CIS baseline</div>
+    </div>
+</div>
+
+@if (_events is null)
+{
+    <p class="muted">Loading…</p>
+}
+else
+{
+    <div class="filter-row">
+        @foreach (var (label, filter) in Filters)
+        {
+            var f = filter;
+            <button class="chip @(_filter == f ? "active" : null)" @onclick="() => _filter = f">
+                @label
+                <span class="muted">(@CountFor(f))</span>
+            </button>
+        }
+    </div>
+
+    <div class="card">
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th>Detected</th>
+                        <th>Endpoint</th>
+                        <th>Rule</th>
+                        <th>Expected → Observed</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var evt in Filtered)
+                    {
+                        <tr>
+                            <td class="small muted" style="white-space:nowrap;">@Dashboard.Ago(evt.DetectedAt)</td>
+                            <td>
+                                <a class="mono" href="endpoints/@evt.EndpointId">@evt.Hostname</a>
+                                <div class="small muted">@evt.ClientName</div>
+                            </td>
+                            <td>
+                                <span class="mono muted">@evt.RuleId</span>
+                                <div class="small">@evt.RuleTitle</div>
+                            </td>
+                            <td class="value-diff">
+                                <span class="exp">@evt.ExpectedValue</span> → <span class="bad">@evt.ObservedValue</span>
+                            </td>
+                            <td>
+                                @switch (evt.Status)
+                                {
+                                    case DriftStatus.Open:
+                                        <StatusPill Text="Open" Kind="StatusPill.PillKind.Critical" />
+                                        break;
+                                    case DriftStatus.AutoRemediated:
+                                        <StatusPill Text="Auto-remediated" Kind="StatusPill.PillKind.Good" />
+                                        break;
+                                    default:
+                                        <StatusPill Text="Acknowledged" Kind="StatusPill.PillKind.Warning" />
+                                        break;
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (!Filtered.Any())
+            {
+                <p class="muted small" style="padding:12px 4px;">No events in this view.</p>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<DriftEvent>? _events;
+    private DriftStatus? _filter;
+
+    private static readonly (string Label, DriftStatus? Filter)[] Filters =
+    [
+        ("All", null),
+        ("Open", DriftStatus.Open),
+        ("Auto-remediated", DriftStatus.AutoRemediated),
+    ];
+
+    protected override async Task OnInitializedAsync()
+        => _events = await Compliance.GetDriftEventsAsync();
+
+    private IEnumerable<DriftEvent> Filtered =>
+        (_events ?? []).Where(e => _filter is null || e.Status == _filter);
+
+    private int CountFor(DriftStatus? filter) =>
+        (_events ?? []).Count(e => filter is null || e.Status == filter);
+}

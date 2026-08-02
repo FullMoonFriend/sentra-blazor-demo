@@ -1,0 +1,170 @@
+@page "/endpoints/{Id:guid}"
+@rendermode InteractiveServer
+@inject IComplianceService Compliance
+
+<PageTitle>Sentra — @(_device?.Hostname ?? "Endpoint")</PageTitle>
+
+<a class="back-link" href="">← Back to dashboard</a>
+
+@if (_device is null)
+{
+    <p class="muted">@(_loaded ? "Endpoint not found." : "Loading…")</p>
+}
+else
+{
+    <div class="card detail-head" style="margin-bottom:14px;">
+        <ScoreDonut Score="@_device.ComplianceScore" Size="130" />
+        <div class="detail-meta">
+            <h1 class="mono">@_device.Hostname</h1>
+            <div class="row"><span class="k">Client</span><span>@_device.ClientName</span></div>
+            <div class="row"><span class="k">Device type</span><span>@_device.Type</span></div>
+            <div class="row"><span class="k">OS</span><span>@_device.OperatingSystem</span></div>
+            <div class="row"><span class="k">Last check-in</span><span>@Dashboard.Ago(_device.LastCheckIn)</span></div>
+            <div class="row">
+                <span class="k">Baseline</span>
+                <span>@_device.EnforcedCount of @(_device.Settings.Count - _device.ExemptCount) scored settings enforced
+                    · @_device.ExemptCount exempt</span>
+            </div>
+        </div>
+        <div>
+            <button class="btn btn-primary" disabled="@(_remediatingAll || _device.DriftedCount == 0)"
+                    @onclick="RemediateAllAsync">
+                @if (_remediatingAll)
+                {
+                    <span class="spinner"></span>
+                    <span>Re-enforcing baseline…</span>
+                }
+                else
+                {
+                    <span>Remediate all drift (@_device.DriftedCount)</span>
+                }
+            </button>
+        </div>
+    </div>
+
+    @foreach (var group in _device.Settings.GroupBy(s => s.Rule.Category))
+    {
+        <div class="card cat-block">
+            <h3>@group.Key
+                <span class="muted small" style="font-weight:400;">
+                    — @group.Count(s => s.State == SettingState.Enforced)/@group.Count() enforced
+                </span>
+            </h3>
+            <div class="table-wrap">
+                <table class="data">
+                    <thead>
+                        <tr>
+                            <th>Rule</th>
+                            <th>Setting</th>
+                            <th>Level</th>
+                            <th>Value</th>
+                            <th>State</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var setting in group)
+                        {
+                            <tr>
+                                <td class="mono muted">@setting.Rule.RuleId</td>
+                                <td>@setting.Rule.Title</td>
+                                <td><span class="pill @(setting.Rule.Level == CisLevel.Level2 ? "pill-accent" : "pill-neutral")">@(setting.Rule.Level == CisLevel.Level2 ? "L2" : "L1")</span></td>
+                                <td class="value-diff">
+                                    @if (setting.State == SettingState.Drifted)
+                                    {
+                                        <span class="bad">@setting.ObservedValue</span><br />
+                                        <span class="exp">expected: @setting.Rule.ExpectedValue</span>
+                                    }
+                                    else
+                                    {
+                                        <span>@setting.Rule.ExpectedValue</span>
+                                    }
+                                </td>
+                                <td>
+                                    @{ var (text, kind) = StatusPill.For(setting.State); }
+                                    <StatusPill Text="@text" Kind="@kind" />
+                                </td>
+                                <td class="num">
+                                    @if (setting.State == SettingState.Drifted)
+                                    {
+                                        <button class="btn btn-ghost btn-sm"
+                                                disabled="@_busyRules.Contains(setting.Rule.RuleId)"
+                                                @onclick="() => RemediateAsync(setting.Rule.RuleId)">
+                                            @if (_busyRules.Contains(setting.Rule.RuleId))
+                                            {
+                                                <span class="spinner"></span>
+                                            }
+                                            else
+                                            {
+                                                <span>Remediate</span>
+                                            }
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @if (_toast is not null)
+    {
+        <div class="toast">@_toast</div>
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private EndpointDevice? _device;
+    private bool _loaded;
+    private bool _remediatingAll;
+    private readonly HashSet<string> _busyRules = [];
+    private string? _toast;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _device = await Compliance.GetEndpointAsync(Id);
+        _loaded = true;
+    }
+
+    private async Task RemediateAsync(string ruleId)
+    {
+        _busyRules.Add(ruleId);
+        try
+        {
+            await Compliance.RemediateAsync(Id, ruleId);
+            _device = await Compliance.GetEndpointAsync(Id);
+            await ShowToastAsync($"Setting {ruleId} re-enforced.");
+        }
+        finally
+        {
+            _busyRules.Remove(ruleId);
+        }
+    }
+
+    private async Task RemediateAllAsync()
+    {
+        _remediatingAll = true;
+        try
+        {
+            var count = await Compliance.RemediateAllAsync(Id);
+            _device = await Compliance.GetEndpointAsync(Id);
+            await ShowToastAsync($"{count} setting(s) re-enforced. Endpoint back at baseline.");
+        }
+        finally
+        {
+            _remediatingAll = false;
+        }
+    }
+
+    private async Task ShowToastAsync(string message)
+    {
+        _toast = message;
+        StateHasChanged();
+        await Task.Delay(2800);
+        _toast = null;
+    }
+}

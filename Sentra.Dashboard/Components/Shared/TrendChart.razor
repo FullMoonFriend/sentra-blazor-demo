@@ -1,0 +1,96 @@
+@* 30-day fleet compliance trend. Hand-rolled SVG line chart:
+   layout math in C#, hover handled with Blazor events on per-point
+   hit columns — no JavaScript interop required.
+   Note: SVG <text> elements are emitted via MarkupString because <text>
+   is a reserved tag in Razor syntax. *@
+
+@if (Points.Count < 2)
+{
+    <div class="muted small">Not enough data yet.</div>
+}
+else
+{
+    <svg class="chart-svg" viewBox="0 0 @W @H" @onmouseleave="() => _hover = null" role="img"
+         aria-label="Fleet compliance trend, last @Points.Count days">
+
+        @* horizontal gridlines + y labels *@
+        @foreach (var tick in _ticks)
+        {
+            <line x1="@PadL" y1="@Y(tick).S()" x2="@(W - PadR)" y2="@Y(tick).S()" stroke="var(--grid)" stroke-width="1" />
+            @SvgText((PadL - 7).S(), (Y(tick) + 3.5).S(), "end", "var(--ink-muted)", "10", null, tick.ToString())
+        }
+
+        @* x labels: first / middle / last *@
+        @foreach (var i in new[] { 0, Points.Count / 2, Points.Count - 1 })
+        {
+            @SvgText(X(i).S(), (H - 6).S(),
+                i == 0 ? "start" : i == Points.Count - 1 ? "end" : "middle",
+                "var(--ink-muted)", "10", null, Points[i].Date.ToString("MMM d"))
+        }
+
+        @* area fill + line *@
+        <path d="@_areaPath" fill="var(--accent)" opacity="0.10" />
+        <path d="@_linePath" fill="none" stroke="var(--accent)" stroke-width="2"
+              stroke-linejoin="round" stroke-linecap="round" />
+
+        @* hover layer: one invisible hit column per point *@
+        @for (var i = 0; i < Points.Count; i++)
+        {
+            var idx = i;
+            <rect x="@((X(idx) - _slotHalf).S())" y="0" width="@((_slotHalf * 2).S())" height="@H"
+                  fill="transparent" @onmouseover="() => _hover = idx" />
+        }
+
+        @if (_hover is int h)
+        {
+            <line x1="@X(h).S()" y1="@PadT" x2="@X(h).S()" y2="@((H - PadB).S())" stroke="var(--baseline)" stroke-width="1" />
+            <circle cx="@X(h).S()" cy="@Y(Points[h].AverageScore).S()" r="4" fill="var(--accent)"
+                    stroke="var(--surface)" stroke-width="2" />
+            <g transform="translate(@TooltipX(h).S(), @PadT)">
+                <rect width="118" height="36" rx="6" fill="var(--surface-2)" stroke="var(--ring)" />
+                @SvgText("9", "15", "start", "var(--ink-muted)", "9.5", null, Points[h].Date.ToString("MMM d, yyyy"))
+                @SvgText("9", "28", "start", "var(--ink)", "11", "650", $"{Points[h].AverageScore:0.0}% compliant")
+            </g>
+        }
+    </svg>
+}
+
+@code {
+    [Parameter, EditorRequired] public required IReadOnlyList<TrendPoint> Points { get; set; }
+
+    private const int W = 640, H = 220;
+    private const int PadL = 34, PadR = 12, PadT = 14, PadB = 26;
+
+    private int? _hover;
+    private double _min, _max = 100, _slotHalf;
+    private string _linePath = "", _areaPath = "";
+    private List<int> _ticks = [];
+
+    protected override void OnParametersSet()
+    {
+        if (Points.Count < 2) return;
+
+        _min = Math.Floor(Points.Min(p => p.AverageScore) / 5) * 5 - 5;
+        _slotHalf = (W - PadL - PadR) / (double)(Points.Count - 1) / 2;
+
+        _ticks = [];
+        for (var t = (int)_min + 5; t <= 100; t += 10) _ticks.Add(t);
+
+        var pts = Points.Select((p, i) => $"{X(i).S()},{Y(p.AverageScore).S()}").ToList();
+        _linePath = "M " + string.Join(" L ", pts);
+        _areaPath = $"{_linePath} L {X(Points.Count - 1).S()},{(H - PadB).S()} L {X(0).S()},{(H - PadB).S()} Z";
+    }
+
+    private double X(int i) => PadL + (W - PadL - PadR) * i / (double)(Points.Count - 1);
+    private double Y(double v) => PadT + (H - PadT - PadB) * (1 - (v - _min) / (_max - _min));
+    private double TooltipX(int h) => Math.Clamp(X(h) - 59, PadL, W - PadR - 118);
+
+    private static MarkupString SvgText(
+        string x, string y, string anchor, string fill, string size, string? weight, string content)
+    {
+        var w = weight is null ? "" : $" font-weight=\"{weight}\"";
+        return new MarkupString(
+            $"<text x=\"{x}\" y=\"{y}\" text-anchor=\"{anchor}\" fill=\"{fill}\" font-size=\"{size}\"{w}>" +
+            System.Net.WebUtility.HtmlEncode(content) + "</text>");
+    }
+}

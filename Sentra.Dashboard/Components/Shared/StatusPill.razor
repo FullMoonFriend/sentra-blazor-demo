@@ -1,0 +1,43 @@
+@* Status is never conveyed by color alone: every pill pairs an icon with a text label. *@
+<span class="pill @CssClass" title="@Title">
+    @if (Kind is PillKind.Good)
+    {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    }
+    else if (Kind is PillKind.Critical)
+    {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    }
+    else if (Kind is PillKind.Warning)
+    {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    }
+    @Text
+</span>
+
+@code {
+    public enum PillKind { Good, Warning, Serious, Critical, Neutral, Accent }
+
+    [Parameter, EditorRequired] public required string Text { get; set; }
+    [Parameter] public PillKind Kind { get; set; } = PillKind.Neutral;
+    [Parameter] public string? Title { get; set; }
+
+    private string CssClass => Kind switch
+    {
+        PillKind.Good => "pill-good",
+        PillKind.Warning => "pill-warning",
+        PillKind.Serious => "pill-serious",
+        PillKind.Critical => "pill-critical",
+        PillKind.Accent => "pill-accent",
+        _ => "pill-neutral",
+    };
+
+    /// <summary>Shared mapping so every view renders a setting state identically.</summary>
+    public static (string Text, PillKind Kind) For(SettingState state) => state switch
+    {
+        SettingState.Enforced => ("Enforced", PillKind.Good),
+        SettingState.Drifted => ("Drifted", PillKind.Critical),
+        SettingState.PendingReboot => ("Pending reboot", PillKind.Warning),
+        _ => ("Exempt", PillKind.Neutral),
+    };
+}

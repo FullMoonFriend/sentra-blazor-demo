@@ -1,0 +1,188 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IComplianceService Compliance
+@inject NavigationManager Nav
+
+<PageTitle>Sentra — Fleet Dashboard</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Fleet Compliance</h1>
+        <div class="sub">CIS Benchmark enforcement across all managed endpoints</div>
+    </div>
+</div>
+
+@if (_summary is null || _endpoints is null)
+{
+    <p class="muted">Loading fleet state…</p>
+}
+else
+{
+    <div class="grid-kpi">
+        <StatCard Label="Fleet Compliance" Value="@($"{_summary.AverageScore}%")"
+                  ValueColor="@ScoreDonut.ScoreColor(_summary.AverageScore)">
+            <Sub><span class="stat-delta-good">▲ trending up</span> over the last 30 days</Sub>
+        </StatCard>
+        <StatCard Label="Endpoints Hardened" Value="@_summary.TotalEndpoints.ToString()">
+            <Sub>@_endpoints.Count(e => e.Type == DeviceType.Workstation) workstations · @_endpoints.Count(e => e.Type == DeviceType.Server) servers</Sub>
+        </StatCard>
+        <StatCard Label="Settings Enforced" Value="@($"{_summary.EnforcedSettings:N0}")">
+            <Sub>of @($"{_summary.TotalScoredSettings:N0}") scored CIS settings</Sub>
+        </StatCard>
+        <StatCard Label="Open Drift Events" Value="@_summary.OpenDriftEvents.ToString()"
+                  ValueColor="@(_summary.OpenDriftEvents > 0 ? "var(--critical)" : "var(--good)")">
+            <Sub>awaiting remediation</Sub>
+        </StatCard>
+    </div>
+
+    <div class="grid-2">
+        <div class="card">
+            <div class="card-title">Compliance trend — last 30 days</div>
+            <TrendChart Points="_trend!" />
+        </div>
+        <div class="card">
+            <div class="card-title">Enforcement by CIS category</div>
+            <CategoryBars Categories="_summary.ByCategory" />
+            <div class="chart-note">Exempt settings excluded from scoring</div>
+        </div>
+    </div>
+
+    <div class="grid-2">
+        <div class="card">
+            <div class="card-title">Managed endpoints</div>
+
+            <div class="filter-row">
+                <input type="text" placeholder="Search hostname or OS…"
+                       value="@_search" @oninput="e => _search = (string?)e.Value ?? string.Empty" />
+                <select value="@_clientFilter" @onchange="e => _clientFilter = (string?)e.Value ?? AllClients">
+                    <option value="@AllClients">All clients</option>
+                    @foreach (var client in _endpoints.Select(x => x.ClientName).Distinct().Order())
+                    {
+                        <option value="@client">@client</option>
+                    }
+                </select>
+                <label class="small muted" style="display:inline-flex;align-items:center;gap:6px;">
+                    <input type="checkbox" checked="@_driftOnly" @onchange="e => _driftOnly = e.Value is true" />
+                    Drifted only
+                </label>
+            </div>
+
+            <div class="table-wrap">
+                <table class="data">
+                    <thead>
+                        <tr>
+                            <th>Endpoint</th>
+                            <th>Client</th>
+                            <th>OS</th>
+                            <th class="num">Enforced</th>
+                            <th>Status</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var device in Filtered)
+                        {
+                            <tr class="row-link" @onclick='() => Nav.NavigateTo($"endpoints/{device.Id}")'>
+                                <td>
+                                    <span class="mono">@device.Hostname</span>
+                                    <div class="small muted">@device.Type · checked in @Ago(device.LastCheckIn)</div>
+                                </td>
+                                <td class="small">@device.ClientName</td>
+                                <td class="small muted">@device.OperatingSystem</td>
+                                <td class="num">@device.EnforcedCount / @(device.Settings.Count - device.ExemptCount)</td>
+                                <td>
+                                    @if (device.DriftedCount > 0)
+                                    {
+                                        <StatusPill Text="@($"{device.DriftedCount} drifted")" Kind="StatusPill.PillKind.Critical" />
+                                    }
+                                    else
+                                    {
+                                        <StatusPill Text="Hardened" Kind="StatusPill.PillKind.Good" />
+                                    }
+                                </td>
+                                <td><ScoreBar Score="device.ComplianceScore" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                @if (!Filtered.Any())
+                {
+                    <p class="muted small" style="padding:12px 4px;">No endpoints match the current filters.</p>
+                }
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Recent drift activity</div>
+            <div class="feed">
+                @foreach (var evt in _recentDrift!)
+                {
+                    <div class="feed-item">
+                        <div class="feed-dot @DotClass(evt.Status)"></div>
+                        <div class="feed-body">
+                            <div class="feed-title">
+                                <span class="mono">@evt.RuleId</span> @evt.RuleTitle
+                            </div>
+                            <div class="feed-meta">
+                                @evt.Hostname · @evt.ClientName · @Ago(evt.DetectedAt)
+                                · @(evt.Status == DriftStatus.Open ? "open" : evt.Status == DriftStatus.AutoRemediated ? "auto-remediated" : "acknowledged")
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div style="margin-top:10px;"><a href="drift" class="small">View all drift events →</a></div>
+        </div>
+    </div>
+}
+
+@code {
+    private const string AllClients = "__all__";
+
+    private FleetSummary? _summary;
+    private IReadOnlyList<EndpointDevice>? _endpoints;
+    private IReadOnlyList<TrendPoint>? _trend;
+    private IReadOnlyList<DriftEvent>? _recentDrift;
+
+    private string _search = string.Empty;
+    private string _clientFilter = AllClients;
+    private bool _driftOnly;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Independent reads — issue them concurrently rather than awaiting one by one.
+        var summaryTask = Compliance.GetFleetSummaryAsync();
+        var endpointsTask = Compliance.GetEndpointsAsync();
+        var trendTask = Compliance.GetComplianceTrendAsync();
+        var driftTask = Compliance.GetDriftEventsAsync(take: 8);
+        await Task.WhenAll(summaryTask, endpointsTask, trendTask, driftTask);
+
+        _summary = summaryTask.Result;
+        _endpoints = endpointsTask.Result;
+        _trend = trendTask.Result;
+        _recentDrift = driftTask.Result;
+    }
+
+    private IEnumerable<EndpointDevice> Filtered =>
+        (_endpoints ?? []).Where(e =>
+            (_clientFilter == AllClients || e.ClientName == _clientFilter) &&
+            (!_driftOnly || e.DriftedCount > 0) &&
+            (string.IsNullOrWhiteSpace(_search)
+                || e.Hostname.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                || e.OperatingSystem.Contains(_search, StringComparison.OrdinalIgnoreCase)));
+
+    private static string DotClass(DriftStatus status) => status switch
+    {
+        DriftStatus.Open => "open",
+        DriftStatus.AutoRemediated => "remediated",
+        _ => "acknowledged",
+    };
+
+    internal static string Ago(DateTime utc)
+    {
+        var span = DateTime.UtcNow - utc;
+        return span.TotalMinutes < 60 ? $"{(int)span.TotalMinutes}m ago"
+            : span.TotalHours < 24 ? $"{(int)span.TotalHours}h ago"
+            : $"{(int)span.TotalDays}d ago";
+    }
+}
