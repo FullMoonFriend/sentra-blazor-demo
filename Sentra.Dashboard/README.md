@@ -9,7 +9,9 @@ external dependencies, no database, no JavaScript chart libraries.
 
 ## Run it
 
-Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (or newer).
+Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or newer —
+the app targets .NET 8 (LTS) and `<RollForward>Major</RollForward>` lets it run on
+machines that only have a newer runtime installed.
 
 ```bash
 cd Sentra.Dashboard
@@ -17,6 +19,10 @@ dotnet run
 ```
 
 Then open the URL it prints (typically `http://localhost:5086`).
+
+```bash
+dotnet test   # from the repo root: xUnit + bUnit suite
+```
 
 ## What it does
 
@@ -31,13 +37,16 @@ Then open the URL it prints (typically `http://localhost:5086`).
 ## Architecture
 
 ```
-Models/          Domain types (EndpointDevice, CisRule, AppliedSetting, DriftEvent, …)
-Services/        IComplianceService (the seam) + InMemoryComplianceService (seeded demo store)
-Components/
-  Layout/        App shell: sidebar navigation
-  Shared/        Reusable components: ScoreDonut, TrendChart, ScoreBar, StatusPill,
-                 StatCard, CategoryBars — charts are hand-rolled SVG rendered by Blazor
-  Pages/         Dashboard, EndpointDetail, DriftEvents (all @rendermode InteractiveServer)
+Sentra.Dashboard/
+  Models/          Domain types (EndpointDevice, CisRule, AppliedSetting, DriftEvent, …)
+  Services/        IComplianceService (the seam) + InMemoryComplianceService (seeded demo store)
+  Components/
+    Layout/        App shell: sidebar navigation
+    Shared/        Reusable components: ScoreDonut, TrendChart, ScoreBar, StatusPill,
+                   StatCard, CategoryBars — charts are hand-rolled SVG rendered by Blazor
+    Pages/         Dashboard, EndpointDetail, DriftEvents (all @rendermode InteractiveServer)
+Sentra.Dashboard.Tests/  xUnit + bUnit: score math, drift/remediation transitions,
+                         component rendering, and a regression test for the toast timer race
 ```
 
 Key decisions worth noting:
@@ -51,6 +60,9 @@ Key decisions worth noting:
 - **Singleton state for the demo.** One shared fleet across circuits, guarded by a lock,
   so two browser tabs see the same remediations. Scoped would be the choice per-user state.
 - **Deterministic seed data.** `Random(1042)` → the same believable fleet on every run.
+- **Tested where it counts.** Domain logic (score math, remediation transitions) is plain C#
+  under xUnit; components render under bUnit with a faked `IComplianceService` — the seam
+  doubles as the test fixture.
 
 ## Not affiliated
 

@@ -154,6 +154,8 @@ a:hover { text-decoration: underline; }
 .stat-value { font-size: 1.9rem; font-weight: 700; margin-top: 4px; }
 .stat-sub { font-size: 0.8rem; color: var(--ink-2); margin-top: 2px; }
 .stat-delta-good { color: #0ca30c; font-weight: 600; }
+.stat-delta-bad { color: var(--critical); font-weight: 600; }
+.stat-delta-neutral { color: var(--ink-muted); font-weight: 600; }
 
 /* ---------- tables ---------- */
 

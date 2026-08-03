@@ -44,7 +44,7 @@ else
                     @foreach (var evt in Filtered)
                     {
                         <tr>
-                            <td class="small muted" style="white-space:nowrap;">@Dashboard.Ago(evt.DetectedAt)</td>
+                            <td class="small muted" style="white-space:nowrap;">@evt.DetectedAt.Ago()</td>
                             <td>
                                 <a class="mono" href="endpoints/@evt.EndpointId">@evt.Hostname</a>
                                 <div class="small muted">@evt.ClientName</div>

@@ -19,7 +19,7 @@ else
             <div class="row"><span class="k">Client</span><span>@_device.ClientName</span></div>
             <div class="row"><span class="k">Device type</span><span>@_device.Type</span></div>
             <div class="row"><span class="k">OS</span><span>@_device.OperatingSystem</span></div>
-            <div class="row"><span class="k">Last check-in</span><span>@Dashboard.Ago(_device.LastCheckIn)</span></div>
+            <div class="row"><span class="k">Last check-in</span><span>@_device.LastCheckIn.Ago()</span></div>
             <div class="row">
                 <span class="k">Baseline</span>
                 <span>@_device.EnforcedCount of @(_device.Settings.Count - _device.ExemptCount) scored settings enforced
@@ -123,6 +123,7 @@ else
     private bool _remediatingAll;
     private readonly HashSet<string> _busyRules = [];
     private string? _toast;
+    private int _toastVersion;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -162,9 +163,10 @@ else
 
     private async Task ShowToastAsync(string message)
     {
+        var version = ++_toastVersion; // a newer toast invalidates this one's expiry timer
         _toast = message;
         StateHasChanged();
         await Task.Delay(2800);
-        _toast = null;
+        if (version == _toastVersion) _toast = null;
     }
 }

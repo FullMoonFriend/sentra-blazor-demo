@@ -15,20 +15,27 @@ idiomatic Blazor over cleverness; don't add packages or abstractions without cle
 ## Commands
 
 ```bash
-cd Sentra.Dashboard
-dotnet build          # build
-dotnet run            # serves on http://localhost:5086 (launchSettings.json)
+dotnet build          # from repo root (Sentra.sln): app + tests
+dotnet test           # 31 tests: xUnit domain/service + bUnit component tests
+cd Sentra.Dashboard && dotnet run   # serves on http://localhost:5086 (launchSettings.json)
 ```
 
-No test project yet (see Backlog). Verify UI changes by running and clicking through:
+The app targets net8.0 with `<RollForward>Major</RollForward>` — this machine only has the
+.NET 10 SDK, so without roll-forward `dotnet run` dies with "missing framework". Don't
+remove it. Also verify UI changes by running and clicking through:
 Dashboard `/` → filter table → click a row → Remediate all → `/drift`.
 
 ## Layout
 
 ```
+Sentra.sln           App + test project.
+Sentra.Dashboard.Tests/  xUnit + bUnit (v2: BunitContext/Render). Characterization tests for
+                     score math and the service; EndpointDetailToastTests guards the toast
+                     timer race with a real-time (~4s) bUnit test — don't "optimize" it away.
 Sentra.Dashboard/
   Models/            Domain types. EndpointDevice computes ComplianceScore
                      (enforced ÷ scored; Exempt settings excluded from denominator).
+                     TrendMath: trend delta/label/css for the dashboard KPI card.
   Services/
     IComplianceService.cs          The seam every component depends on.
     InMemoryComplianceService.cs   Singleton store, Random(1042) seed, lock-guarded.
@@ -69,23 +76,25 @@ Sentra.Dashboard/
   serialize awaits.
 - Score bands: ≥90 good, 75–89 warning, <75 critical — defined once in
   `ScoreDonut.ScoreColor/ScoreBand`.
+- **Toast expiry uses a version counter** (`_toastVersion` in EndpointDetail): a stale
+  `Task.Delay` must not clear a newer toast. Regression-tested in EndpointDetailToastTests.
+- Relative timestamps: `FormatExtensions.Ago(this DateTime, DateTime? now)` — the `now`
+  parameter exists for tests; don't inline `DateTime.UtcNow` math in components.
 
 ## Current state
 
 Everything above builds clean and is verified working (filters, per-row remediate with
-spinner, remediate-all, toast, all three pages). Screenshots from the last verified run
-are in the repo root (`shot-*.png`).
+spinner, remediate-all, toast, all three pages), and `dotnet test` is green (31 tests).
+Screenshots from the last verified run are in the repo root (`shot-*.png`).
 
 ## Backlog (interview-priority order)
 
-1. **bUnit + xUnit test project** — score math, drift transitions, a component test on
-   StatusPill/ScoreBar. Biggest credibility win per hour.
-2. **Simulated live drift feed** — a `BackgroundService` that injects DriftEvents on a
+1. **Simulated live drift feed** — a `BackgroundService` that injects DriftEvents on a
    timer; dashboard subscribes via an event on IComplianceService and updates in real
    time (`InvokeAsync(StateHasChanged)`). Shows Blazor Server's SignalR strength.
-3. **Audit report export** — generate a compliance CSV/PDF per client.
-4. **EF Core + SQLite swap** behind IComplianceService, proving the seam works.
-5. Auth (Entra ID) — mention in interview, probably not worth building.
+2. **Audit report export** — generate a compliance CSV/PDF per client.
+3. **EF Core + SQLite swap** behind IComplianceService, proving the seam works.
+4. Auth (Entra ID) — mention in interview, probably not worth building.
 
 ## Interview context (don't lose sight of)
 

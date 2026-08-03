@@ -21,7 +21,7 @@ else
     <div class="grid-kpi">
         <StatCard Label="Fleet Compliance" Value="@($"{_summary.AverageScore}%")"
                   ValueColor="@ScoreDonut.ScoreColor(_summary.AverageScore)">
-            <Sub><span class="stat-delta-good">▲ trending up</span> over the last 30 days</Sub>
+            <Sub><span class="@TrendMath.CssClass(_trendDelta)">@TrendMath.Label(_trendDelta)</span> over the last 30 days</Sub>
         </StatCard>
         <StatCard Label="Endpoints Hardened" Value="@_summary.TotalEndpoints.ToString()">
             <Sub>@_endpoints.Count(e => e.Type == DeviceType.Workstation) workstations · @_endpoints.Count(e => e.Type == DeviceType.Server) servers</Sub>
@@ -85,7 +85,7 @@ else
                             <tr class="row-link" @onclick='() => Nav.NavigateTo($"endpoints/{device.Id}")'>
                                 <td>
                                     <span class="mono">@device.Hostname</span>
-                                    <div class="small muted">@device.Type · checked in @Ago(device.LastCheckIn)</div>
+                                    <div class="small muted">@device.Type · checked in @device.LastCheckIn.Ago()</div>
                                 </td>
                                 <td class="small">@device.ClientName</td>
                                 <td class="small muted">@device.OperatingSystem</td>
@@ -124,7 +124,7 @@ else
                                 <span class="mono">@evt.RuleId</span> @evt.RuleTitle
                             </div>
                             <div class="feed-meta">
-                                @evt.Hostname · @evt.ClientName · @Ago(evt.DetectedAt)
+                                @evt.Hostname · @evt.ClientName · @evt.DetectedAt.Ago()
                                 · @(evt.Status == DriftStatus.Open ? "open" : evt.Status == DriftStatus.AutoRemediated ? "auto-remediated" : "acknowledged")
                             </div>
                         </div>
@@ -147,6 +147,7 @@ else
     private string _search = string.Empty;
     private string _clientFilter = AllClients;
     private bool _driftOnly;
+    private double _trendDelta;
 
     protected override async Task OnInitializedAsync()
     {
@@ -161,6 +162,7 @@ else
         _endpoints = endpointsTask.Result;
         _trend = trendTask.Result;
         _recentDrift = driftTask.Result;
+        _trendDelta = TrendMath.Delta(_trend);
     }
 
     private IEnumerable<EndpointDevice> Filtered =>
@@ -177,12 +179,4 @@ else
         DriftStatus.AutoRemediated => "remediated",
         _ => "acknowledged",
     };
-
-    internal static string Ago(DateTime utc)
-    {
-        var span = DateTime.UtcNow - utc;
-        return span.TotalMinutes < 60 ? $"{(int)span.TotalMinutes}m ago"
-            : span.TotalHours < 24 ? $"{(int)span.TotalHours}h ago"
-            : $"{(int)span.TotalDays}d ago";
-    }
 }

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Sentra.Dashboard.Tests/Sentra.Dashboard.Tests.csproj" />
+  <Project Path="Sentra.Dashboard/Sentra.Dashboard.csproj" />
+</Solution>

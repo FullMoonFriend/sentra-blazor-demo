@@ -9,10 +9,12 @@ Notes for presenting the project in a .NET / Blazor developer interview. Skimmab
 > hardening and drift remediation for MSPs — and built a working slice of that product as
 > a .NET 8 Blazor Server app: a fleet compliance dashboard, endpoint drill-down with live
 > remediation, and a drift audit trail. Seeded in-memory data behind an interface, so the
-> whole UI would survive a swap to a real backend untouched."
+> whole UI would survive a swap to a real backend untouched — and that same interface is
+> what the xUnit/bUnit test suite fakes."
 
 Demoing: run `dotnet run`, show the dashboard, filter to "Drifted only", open an endpoint,
 click **Remediate all**, watch the score and pills update, then show the drift log.
+If there's time, run `dotnet test` on screen — 31 green tests is its own statement.
 
 ## Blazor concepts the project demonstrates (and where)
 
@@ -41,6 +43,18 @@ concurrently with `Task.WhenAll`, not awaited sequentially) vs `OnParametersSetA
 **Event handling & state.** The remediate flow in `EndpointDetail.razor`: per-row busy
 tracking with a `HashSet<string>`, disabled buttons + spinners during the simulated agent
 round-trip, then a toast via `StateHasChanged()` + `Task.Delay`. No JS anywhere.
+Good war story: the toast originally had a race — remediate two rows within ~3 seconds
+and the first toast's expiry timer wiped the second toast. Fixed with a version counter
+(`_toastVersion`), and the fix was written test-first: a bUnit test reproduces the race
+with a faked `IComplianceService` (`EndpointDetailToastTests`), failed on the old code,
+passes on the fix. That's a concrete "how do you test async UI state" answer.
+
+**Testing (`Sentra.Dashboard.Tests`).** 31 tests, three layers: plain-xUnit domain tests
+(score math edge cases — all-exempt endpoints score 100, exempt excluded from the
+denominator), service tests against the real `InMemoryComplianceService` (remediation
+flips state, closes open drift events, no-ops on non-drifted settings, seed is
+deterministic), and bUnit component tests (StatusPill renders text + icon, never color
+alone; the toast race above). The DI seam is the test fixture — no mocking framework needed.
 
 **Data binding.** The dashboard filter row shows the two styles deliberately:
 `@oninput` for the search box (filter as you type) versus `@onchange`/`value` for the
@@ -70,6 +84,13 @@ experience): SVG `<text>` collides with Razor's reserved `<text>` tag (worked ar
   a small product-thinking detail worth saying out loud.
 - **MSP multi-tenancy**: the client filter (Meridian Health / Rockledge Financial /
   TrueNorth Logistics) nods at Senteon's actual buyer — MSPs managing many customer fleets.
+- **"What about macOS/Linux endpoints?"** The demo fleet is all-Windows because Senteon's
+  product hardens Windows, Edge, and Office — but CIS publishes benchmarks for macOS and
+  Linux too, and the domain model here (`CisRule`, `AppliedSetting`, `EndpointDevice`)
+  assumes nothing about the OS. Supporting a Mac fleet is a new catalog category plus seed
+  data; zero model or UI changes. (The app itself is cross-platform — it targets .NET 8
+  LTS with `<RollForward>Major</RollForward>` so it runs on any newer runtime, and SVG
+  coordinates are formatted invariant-culture so a European-locale server can't break paths.)
 
 ## "How would you take this to production?" (have an answer ready)
 
@@ -80,8 +101,8 @@ experience): SVG `<text>` collides with Razor's reserved `<text>` tag (worked ar
   connection.
 - AuthN/Z: ASP.NET Core Identity or Entra ID; per-tenant authorization policies so an MSP
   tech only sees their clients.
-- Tests: domain logic (score math, drift transitions) is plain C# — unit test with xUnit;
-  component tests with bUnit; the seeded service doubles as a test fixture.
+- Tests: already started — xUnit + bUnit suite in `Sentra.Dashboard.Tests` (see Testing
+  section above); production would add integration tests over the real data layer.
 - Hardening the app itself: HTTPS/HSTS already scaffolded; add antiforgery (present by
   default), rate limiting, audit logging of remediation actions.
 
