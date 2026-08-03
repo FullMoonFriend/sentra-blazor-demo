@@ -28,7 +28,10 @@ Dashboard `/` → filter table → click a row → Remediate all → `/drift`.
 ## Layout
 
 ```
-Sentra.sln           App + test project.
+Sentra.slnx          App + test project (SDK-10 solution format; dotnet CLI handles it).
+.vscode/             Committed. launch.json debugs the app DLL directly — that path skips
+                     launchSettings.json, so it pins port 5086 via ASPNETCORE_URLS.
+                     Tasks: build (default), test, watch.
 Sentra.Dashboard.Tests/  xUnit + bUnit (v2: BunitContext/Render). Characterization tests for
                      score math and the service; EndpointDetailToastTests guards the toast
                      timer race with a real-time (~4s) bUnit test — don't "optimize" it away.

@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": ".NET Launch (Sentra.Dashboard)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/Sentra.Dashboard/bin/Debug/net8.0/Sentra.Dashboard.dll",
+            "cwd": "${workspaceFolder}/Sentra.Dashboard",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            },
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                // Launching the DLL directly skips launchSettings.json, so pin the same port here.
+                "ASPNETCORE_URLS": "http://localhost:5086"
+            }
+        },
+        {
+            "name": ".NET Attach",
+            "type": "coreclr",
+            "request": "attach"
+        }
+    ]
+}
